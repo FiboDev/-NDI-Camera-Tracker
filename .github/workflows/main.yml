@@ -1,54 +1,33 @@
-name: Clone Triggering Repo to Databricks
+name: Clone Triggering Repo to Databricks (sin GitHub App propia)
 
-# Disparo manual desde la pestaña Actions -> Run workflow
 on:
   workflow_dispatch:
 
 env:
   DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
-  # Para probar en Free Edition (sin Azure) usa un PAT generado en el workspace:
   DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
-  # Cuando pases a un Azure Databricks real, reemplaza la línea de arriba por:
-  # ARM_CLIENT_ID: ${{ secrets.SPN_CLIENT_ID }}
-  # ARM_CLIENT_SECRET: ${{ secrets.SPN_CLIENT_SECRET }}
-  # ARM_TENANT_ID: ${{ secrets.SPN_TENANT_ID }}
 
 jobs:
   sync-repo:
     runs-on: ubuntu-latest
     steps:
 
-      # ── Paso ①: token de la GitHub App (auth de Databricks -> GitHub) ──
-      - name: Generate GitHub App installation token
-        id: app-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.GH_APP_ID }}
-          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: ${{ github.event.repository.name }}
-
-      # ── Instalar el Databricks CLI ──────────────────────────────────
       - name: Install Databricks CLI
         run: curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
 
-      # ── Registrar/actualizar el git credential en Databricks ────────
-      - name: Update git credential in Databricks
+      # No hace falta tocar git-credentials aquí: ya quedó configurado
+      # cuando autorizaste la GitHub App de Databricks desde la UI.
+      # Este paso solo confirma que existe, para detectar el problema
+      # temprano si por alguna razón no está vinculado.
+      - name: Verify git credential exists
         run: |
-          CRED_ID=$(databricks git-credentials list -o json | jq -r '.[0].credential_id')
-          if [ -z "$CRED_ID" ] || [ "$CRED_ID" = "null" ]; then
-            echo "No existe credential aún, creando uno nuevo..."
-            databricks git-credentials create gitHub \
-              --git-username x-access-token \
-              --personal-access-token "${{ steps.app-token.outputs.token }}"
-          else
-            databricks git-credentials update "$CRED_ID" \
-              --git-provider gitHub \
-              --git-username x-access-token \
-              --personal-access-token "${{ steps.app-token.outputs.token }}"
+          CRED_COUNT=$(databricks git-credentials list -o json | jq 'length')
+          if [ "$CRED_COUNT" -eq 0 ]; then
+            echo "No hay ningún git credential configurado. Ve a Settings -> Linked accounts en Databricks y autoriza GitHub."
+            exit 1
           fi
+          echo "Git credential encontrado, continuando..."
 
-      # ── Clonar (o actualizar) exactamente el repo que disparó el workflow ─
       - name: Clone or update repo in Databricks
         env:
           REPO_URL: ${{ github.server_url }}/${{ github.repository }}
