@@ -1,40 +1,65 @@
-name: Test GitHub App Token
+name: Clone Triggering Repo to Databricks
+
+# Disparo manual desde la pestaña Actions -> Run workflow
 on:
   workflow_dispatch:
 
+env:
+  DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+  # Para probar en Free Edition (sin Azure) usa un PAT generado en el workspace:
+  DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+  # Cuando pases a un Azure Databricks real, reemplaza la línea de arriba por:
+  # ARM_CLIENT_ID: ${{ secrets.SPN_CLIENT_ID }}
+  # ARM_CLIENT_SECRET: ${{ secrets.SPN_CLIENT_SECRET }}
+  # ARM_TENANT_ID: ${{ secrets.SPN_TENANT_ID }}
+
 jobs:
-  test-token:
+  sync-repo:
     runs-on: ubuntu-latest
     steps:
 
-      - name: Generate installation token
+      # ── Paso ①: token de la GitHub App (auth de Databricks -> GitHub) ──
+      - name: Generate GitHub App installation token
         id: app-token
         uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
-          # Deja owner/repositories vacío para probar con todos los repos
-          # donde tengas la App instalada, o especifica uno para probar el scoping:
-          # owner: tu-usuario
-          # repositories: nombre-del-repo
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
 
-      # Prueba 1: confirmar que el token es válido, listando a qué repos tiene acceso.
-      # No expone el token, solo los nombres de repo devueltos por la API.
-      - name: List accessible repos
+      # ── Instalar el Databricks CLI ──────────────────────────────────
+      - name: Install Databricks CLI
+        run: curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
+
+      # ── Registrar/actualizar el git credential en Databricks ────────
+      - name: Update git credential in Databricks
         run: |
-          curl -s \
-            -H "Authorization: Bearer ${{ steps.app-token.outputs.token }}" \
-            -H "Accept: application/vnd.github+json" \
-            https://api.github.com/installation/repositories \
-          | jq -r '.repositories[].full_name'
+          CRED_ID=$(databricks git-credentials list -o json | jq -r '.[0].credential_id')
+          if [ -z "$CRED_ID" ] || [ "$CRED_ID" = "null" ]; then
+            echo "No existe credential aún, creando uno nuevo..."
+            databricks git-credentials create gitHub \
+              --git-username x-access-token \
+              --personal-access-token "${{ steps.app-token.outputs.token }}"
+          else
+            databricks git-credentials update "$CRED_ID" \
+              --git-provider gitHub \
+              --git-username x-access-token \
+              --personal-access-token "${{ steps.app-token.outputs.token }}"
+          fi
 
-      # Prueba 2: la que realmente importa - confirmar que con este token
-      # se puede hacer git clone, que es lo que hará Databricks internamente.
-      - name: Test git clone with the token
+      # ── Clonar (o actualizar) exactamente el repo que disparó el workflow ─
+      - name: Clone or update repo in Databricks
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          REPO: tu-usuario/tu-repo   # cambia esto al repo real que instalaste
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          REPO_PATH: /Repos/test/${{ github.event.repository.name }}
+          BRANCH: ${{ github.ref_name }}
         run: |
-          git clone "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" test-clone
-          echo "Clone exitoso:"
-          ls test-clone
+          if databricks repos get "$REPO_PATH" >/dev/null 2>&1; then
+            echo "Repo ya existe en $REPO_PATH, actualizando a $BRANCH..."
+            databricks repos update "$REPO_PATH" --branch "$BRANCH"
+          else
+            echo "Clonando $REPO_URL en $REPO_PATH..."
+            databricks repos create "$REPO_URL" gitHub --path "$REPO_PATH"
+            databricks repos update "$REPO_PATH" --branch "$BRANCH"
+          fi
