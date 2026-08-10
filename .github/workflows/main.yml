@@ -1,0 +1,40 @@
+name: Test GitHub App Token
+on:
+  workflow_dispatch:
+
+jobs:
+  test-token:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Generate installation token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          # Deja owner/repositories vacío para probar con todos los repos
+          # donde tengas la App instalada, o especifica uno para probar el scoping:
+          # owner: tu-usuario
+          # repositories: nombre-del-repo
+
+      # Prueba 1: confirmar que el token es válido, listando a qué repos tiene acceso.
+      # No expone el token, solo los nombres de repo devueltos por la API.
+      - name: List accessible repos
+        run: |
+          curl -s \
+            -H "Authorization: Bearer ${{ steps.app-token.outputs.token }}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/installation/repositories \
+          | jq -r '.repositories[].full_name'
+
+      # Prueba 2: la que realmente importa - confirmar que con este token
+      # se puede hacer git clone, que es lo que hará Databricks internamente.
+      - name: Test git clone with the token
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: tu-usuario/tu-repo   # cambia esto al repo real que instalaste
+        run: |
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" test-clone
+          echo "Clone exitoso:"
+          ls test-clone
