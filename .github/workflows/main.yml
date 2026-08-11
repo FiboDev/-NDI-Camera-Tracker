@@ -28,7 +28,7 @@ jobs:
         run: databricks workspace mkdirs /Repos/test
 
       - name: Show github credentials
-        run: databricks git-credentials list -o json | jq 'length'
+        run: databricks git-credentials list -o json
 
       - name: Clone or update repo in Databricks
         env:
