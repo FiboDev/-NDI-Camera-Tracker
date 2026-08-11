@@ -27,6 +27,9 @@ jobs:
       - name: Ensure parent folder exists
         run: databricks workspace mkdirs /Repos/test
 
+      - name: Show github credentials
+        run: databricks git-credentials list -o json | jq 'length'
+
       - name: Clone or update repo in Databricks
         env:
           REPO_URL: ${{ github.server_url }}/${{ github.repository }}
