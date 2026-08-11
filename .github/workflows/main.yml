@@ -1,4 +1,4 @@
-name: Clone Triggering Repo to Databricks (sin GitHub App propia)
+name: Clone Triggering Repo to Databricks
 
 on:
   workflow_dispatch:
@@ -15,11 +15,7 @@ jobs:
 
       - name: Install Databricks CLI
         run: curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
-
-      # No hace falta tocar git-credentials aquí: ya quedó configurado
-      # cuando autorizaste la GitHub App de Databricks desde la UI.
-      # Este paso solo confirma que existe, para detectar el problema
-      # temprano si por alguna razón no está vinculado.
+        
       - name: Verify git credential exists
         run: |
           CRED_COUNT=$(databricks git-credentials list -o json | jq 'length')
@@ -28,6 +24,8 @@ jobs:
             exit 1
           fi
           echo "Git credential encontrado, continuando..."
+      - name: Ensure parent folder exists
+        run: databricks workspace mkdirs /Repos/test
 
       - name: Clone or update repo in Databricks
         env:
