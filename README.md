@@ -4,7 +4,7 @@ Seguimiento automático de una cámara PTZ con visión por computador: la cámar
 
 Se usa **todos los domingos** en las transmisiones en vivo de mi iglesia, con una cámara PTZ Avkans controlada por ONVIF.
 
-<!-- Agrega aquí un GIF de 5–10 s del seguimiento (por ejemplo, generado desde videos/predica.mp4). Es lo primero que se ve del repo. -->
+<!-- GIF PRONTO -->
 
 ## El problema
 
@@ -58,7 +58,7 @@ El punto central del proyecto: **no perder a la persona cuando la luz cambia** y
 
 `test.py` es un banco de pruebas para probar variantes sobre video grabado (`videos/predica.mp4`) sin mover la cámara.
 
-Probé varios modelos de detección; <!-- completa: cuáles (ej. YOLO11n / s / m) --> me quedé con **YOLO11m** a `imgsz=720` porque fue el que mantuvo el seguimiento de forma más consistente en condiciones reales.
+Probé varios modelos de detección; Yolo11n, Yolo10, Yolo26. me quedé con **YOLO11m** a `imgsz=720` porque fue el que mantuvo el seguimiento de forma más consistente en condiciones reales y más ligero para un equipo de hardware medio en una iglesia.
 
 ## Requisitos
 
